@@ -1,0 +1,80 @@
+C51 COMPILER V9.54   MAIN                                                                  02/14/2026 17:53:52 PAGE 1   
+
+
+C51 COMPILER V9.54, COMPILATION OF MODULE MAIN
+OBJECT MODULE PLACED IN .\Objects\main.obj
+COMPILER INVOKED BY: E:\Study\Keil5\C51\BIN\C51.EXE main.c OPTIMIZE(8,SPEED) BROWSE DEBUG OBJECTEXTEND PRINT(.\Listings\
+                    -main.lst) TABS(3) OBJECT(.\Objects\main.obj)
+
+line level    source
+
+   1          #include <STC89C5xRC.H>
+   2          #include "LCD1602.h"
+   3          #include "Delay.h"
+   4          #include "XPT2046.h"
+   5          #include "UART.h"
+   6          #include <stdio.h>      // 用于 sprintf
+   7          
+   8          unsigned int ADValue;   // ADC转换数字信号
+   9          
+  10          // 删掉重复的声明（已在UART.h中声明）
+  11          // void UART_Init(void);   
+  12          // void UART_SendString(unsigned char *str);  
+  13          
+  14          void main(){
+  15   1          unsigned int adj_value, ntc_value, light_value; // 分别存储三路值
+  16   1          unsigned char send_buf[64] = {0};               // 增大缓冲区，初始化
+  17   1          char *status;
+  18   1          
+  19   1          UART_Init();        // 初始化串口
+  20   1          LCD_Init();         // 初始化LCD1602
+  21   1          LCD_ShowString(1, 1, "ADJ  NTC  RG"); // 显示固定字符串
+  22   1          
+  23   1          while(1){
+  24   2              // 1. 读取可调电阻（电位器）
+  25   2              adj_value = XPT2046_ReadAD(XPT2046_XP_8);
+  26   2              LCD_ShowNum(2, 1, adj_value, 4);
+  27   2              
+  28   2              // 2. 读取热敏电阻
+  29   2              ntc_value = XPT2046_ReadAD(XPT2046_YP_8);
+  30   2              LCD_ShowNum(2, 6, ntc_value, 4);
+  31   2              
+  32   2              // 3. 读取光敏电阻
+  33   2              light_value = XPT2046_ReadAD(XPT2046_VBAT_8);
+  34   2              LCD_ShowNum(2, 11, light_value, 4);
+  35   2              
+  36   2              // 4. 根据光照值判断状态
+  37   2              if (light_value > 800) 
+  38   2                  status = "Bright";
+  39   2              else if (light_value > 300) 
+  40   2                  status = "Normal";
+  41   2              else 
+  42   2                  status = "Dark";
+  43   2              
+  44   2              // 5. 格式化发送字符串（新增ADJ/NTC）
+  45   2              sprintf(send_buf, "ADJ:%d|NTC:%d|LIGHT:%d|STATUS:%s\r\n", 
+  46   2                      adj_value, ntc_value, light_value, status);
+  47   2              
+  48   2              // 6. 通过串口发送
+  49   2              UART_SendString(send_buf);
+  50   2              
+  51   2              // 7. 延时
+  52   2              Delay(100);      
+  53   2          }
+  54   1      }
+C51 COMPILER V9.54   MAIN                                                                  02/14/2026 17:53:52 PAGE 2   
+
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    224    ----
+   CONSTANT SIZE    =    131    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =      2      73
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)
