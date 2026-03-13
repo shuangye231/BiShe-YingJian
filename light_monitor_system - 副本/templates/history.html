@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>历史数据&趋势图 - 单片机传感器实时监控系统</title>
+    <script src="https://cdn.staticfile.org/echarts/5.4.3/echarts.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: "Microsoft Yahei", "微软雅黑", sans-serif;
+            background: linear-gradient(135deg, #1e3c72, #2a5298);
+            min-height: 100vh;
+            color: #fff;
+        }
+        /* 导航栏样式 */
+        .navbar {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 15px 30px; background: rgba(0,0,0,0.3); backdrop-filter: blur(10px);
+        }
+        .navbar .logo { font-size: 20px; font-weight: bold; }
+        .nav-menu a { color: #fff; text-decoration: none; margin: 0 15px; padding: 8px 12px; border-radius: 4px; }
+        .nav-menu a.active { background: #2ecc71; }
+        .user-info { display: flex; align-items: center; gap: 15px; }
+        .logout-btn { background: #e74c3c; color: #fff; padding: 6px 12px; border-radius: 4px; text-decoration: none; }
+
+        .page-title { text-align: center; margin: 30px 0; font-size: 32px; }
+
+        /* 图表容器 */
+        .chart-container {
+            width: 90%; margin: 20px auto; padding: 20px;
+            background: #fff; border-radius: 12px;
+        }
+        .chart-header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 20px;
+        }
+        .chart-title { font-size: 24px; font-weight: bold; color: #333; }
+        .time-selector {
+            padding: 6px 12px; border: 1px solid #d9d9d9; border-radius: 6px;
+            background-color: #fafafa; color: #333; font-size: 14px; cursor: pointer;
+            outline: none; transition: all 0.3s;
+        }
+        .time-selector:hover { border-color: #1890ff; background-color: #fff; }
+        .time-selector:focus { border-color: #1890ff; box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2); }
+        .chart-box { width: 100%; height: 400px; border-radius: 8px; background-color: #f5f7fa; }
+
+        .connect-status {
+            width: 90%; margin: 30px auto; padding: 15px; text-align: center;
+            border: 1px solid #e8e8e8; border-radius: 8px; background: #fff;
+            font-size: 14px; color: #666;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="logo">📊 单片机传感器实时监控系统</div>
+        <div class="nav-menu">
+            <a href="/index">实时监控</a>
+            <a href="/history" class="active">历史数据&趋势图</a>
+        </div>
+        <div class="user-info">
+            <span>欢迎你，{{ username }}</span>
+            <a href="/logout" class="logout-btn">退出登录</a>
+        </div>
+    </nav>
+
+    <h1 class="page-title">传感器历史数据&变化趋势图</h1>
+
+    <!-- 1. 可调电阻 -->
+    <div class="chart-container">
+        <div class="chart-header">
+            <div class="chart-title">🔘 可调电阻(ADJ) 数值变化趋势</div>
+            <select class="time-selector" data-chart="adj">
+                <option value="60000">最近 1 分钟</option>
+                <option value="180000">最近 3 分钟</option>
+                <option value="300000" selected>最近 5 分钟</option>
+                <option value="600000">最近 10 分钟</option>
+            </select>
+        </div>
+        <div id="adj-chart" class="chart-box"></div>
+    </div>
+
+    <!-- 2. 热敏电阻 -->
+    <div class="chart-container">
+        <div class="chart-header">
+            <div class="chart-title">🌡️ 热敏电阻(NTC) 原始AD值趋势</div>
+            <select class="time-selector" data-chart="ntc">
+                <option value="60000">最近 1 分钟</option>
+                <option value="180000">最近 3 分钟</option>
+                <option value="300000" selected>最近 5 分钟</option>
+                <option value="600000">最近 10 分钟</option>
+            </select>
+        </div>
+        <div id="ntc-chart" class="chart-box"></div>
+    </div>
+
+    <!-- 3. 光敏电阻 -->
+    <div class="chart-container">
+        <div class="chart-header">
+            <div class="chart-title">💡 光敏电阻(LIGHT) 原始AD值趋势</div>
+            <select class="time-selector" data-chart="light">
+                <option value="60000">最近 1 分钟</option>
+                <option value="180000">最近 3 分钟</option>
+                <option value="300000" selected>最近 5 分钟</option>
+                <option value="600000">最近 10 分钟</option>
+            </select>
+        </div>
+        <div id="light-chart" class="chart-box"></div>
+    </div>
+
+    <!-- 4. 实际温度 -->
+    <div class="chart-container">
+        <div class="chart-header">
+            <div class="chart-title">🌡️ 实际温度(°C) 趋势 (带高低温预警)</div>
+            <select class="time-selector" data-chart="temp">
+                <option value="60000">最近 1 分钟</option>
+                <option value="180000">最近 3 分钟</option>
+                <option value="300000" selected>最近 5 分钟</option>
+                <option value="600000">最近 10 分钟</option>
+            </select>
+        </div>
+        <div id="temp-chart" class="chart-box"></div>
+    </div>
+
+    <div class="connect-status" id="connect-status">🔌 正在连接服务器...</div>
+
+    <script>
+        // ===================== 全局配置 =====================
+        let adjChart, ntcChart, lightChart, tempChart;
+        let ws = null;
+        const MAX_DATA_COUNT = 5000; // 最大缓存数据量，防止内存溢出
+
+        // 核心：全局唯一数据缓存（所有图表共用一套时间线，切换档位永不丢失数据）
+        // 格式：[{ time: 时间戳(ms), adj: 数值, ntc: 数值, light: 数值, temp: 数值 }, ...]
+        let globalDataCache = [];
+
+        // 每个图表的显示时长配置（毫秒），切换档位只改这个，不碰数据
+        const chartDurationConfig = {
+            adj: 300000,
+            ntc: 300000,
+            light: 300000,
+            temp: 300000
+        };
+
+        // ===================== 工具函数：HH:mm:ss 转当天时间戳 =====================
+        function timeStrToTimestamp(timeStr) {
+            if (!timeStr || typeof timeStr !== 'string') return Date.now();
+            const parts = timeStr.split(':').map(Number);
+            if (parts.length !== 3) return Date.now();
+
+            const [hours, minutes, seconds] = parts;
+            const now = new Date();
+            const targetTime = new Date(
+                now.getFullYear(),
+                now.getMonth(),
+                now.getDate(),
+                hours,
+                minutes,
+                seconds
+            );
+
+            // 兼容跨天场景（23:59 → 00:00）
+            if (targetTime.getTime() > now.getTime() + 3600000) {
+                targetTime.setDate(targetTime.getDate() - 1);
+            }
+            return targetTime.getTime();
+        }
+
+        // ===================== 1. 初始化图表 =====================
+        function initCharts() {
+            adjChart = echarts.init(document.getElementById('adj-chart'));
+            ntcChart = echarts.init(document.getElementById('ntc-chart'));
+            lightChart = echarts.init(document.getElementById('light-chart'));
+            tempChart = echarts.init(document.getElementById('temp-chart'));
+
+            // 通用基础配置
+            const commonOption = {
+                backgroundColor: '#f5f7fa',
+                tooltip: {
+                    trigger: 'axis',
+                    axisPointer: { type: 'cross' },
+                    textStyle: { fontSize: 14 }
+                },
+                grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+                xAxis: {
+                    type: 'time',
+                    boundaryGap: false,
+                    axisLabel: {
+                        formatter: (value) => new Date(value).toLocaleTimeString(),
+                        fontSize: 12,
+                        color: '#666'
+                    },
+                    axisLine: { lineStyle: { color: '#e8e8e8' } },
+                    splitLine: { lineStyle: { color: '#e8e8e8' } },
+                    minInterval: 1000 // 最小刻度间隔1秒，和你的数据频率匹配
+                },
+                yAxis: {
+                    type: 'value',
+                    min: 0,
+                    max: 255,
+                    name: 'AD值',
+                    nameTextStyle: { fontSize: 13, color: '#666' },
+                    axisLabel: { fontSize: 12, color: '#666' },
+                    axisLine: { lineStyle: { color: '#e8e8e8' } },
+                    splitLine: { lineStyle: { color: '#e8e8e8' } }
+                }
+            };
+
+            // 1. 可调电阻图表
+            adjChart.setOption({
+                ...commonOption,
+                tooltip: {
+                    ...commonOption.tooltip,
+                    formatter: (params) => {
+                        if (!params.length) return '';
+                        const item = params[0];
+                        return `${new Date(item.value[0]).toLocaleTimeString()}<br/>可调电阻AD值: ${item.value[1]}`;
+                    }
+                },
+                series: [{
+                    name: 'ADJ',
+                    type: 'line',
+                    smooth: true,
+                    symbol: 'circle',
+                    symbolSize: 6,
+                    data: [],
+                    lineStyle: { width: 3, color: '#1890ff' },
+                    itemStyle: { color: '#1890ff' },
+                    areaStyle: {
+                        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                            { offset: 0, color: 'rgba(24, 144, 255, 0.3)' },
+                            { offset: 1, color: 'rgba(24, 144, 255, 0.05)' }
+                        ])
+                    }
+                }]
+            });
+
+            // 2. 热敏电阻图表
+            ntcChart.setOption({
+                ...commonOption,
+                tooltip: {
+                    ...commonOption.tooltip,
+                    formatter: (params) => {
+                        if (!params.length) return '';
+                        const item = params[0];
+                        return `${new Date(item.value[0]).toLocaleTimeString()}<br/>热敏电阻AD值: ${item.value[1]}`;
+                    }
+                },
+                series: [{
+                    name: 'NTC',
+                    type: 'line',
+                    smooth: true,
+                    symbol: 'circle',
+                    symbolSize: 6,
+                    data: [],
+                    lineStyle: { width: 3, color: '#ff4d4f' },
+                    itemStyle: { color: '#ff4d4f' },
+                    areaStyle: {
+                        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                            { offset: 0, color: 'rgba(255, 77, 79, 0.3)' },
+                            { offset: 1, color: 'rgba(255, 77, 79, 0.05)' }
+                        ])
+                    }
+                }]
+            });
+
+            // 3. 光敏电阻图表
+            lightChart.setOption({
+                ...commonOption,
+                tooltip: {
+                    ...commonOption.tooltip,
+                    formatter: (params) => {
+                        if (!params.length) return '';
+                        const item = params[0];
+                        return `${new Date(item.value[0]).toLocaleTimeString()}<br/>光敏电阻AD值: ${item.value[1]}`;
+                    }
+                },
+                series: [{
+                    name: 'LIGHT',
+                    type: 'line',
+                    smooth: true,
+                    symbol: 'circle',
+                    symbolSize: 6,
+                    data: [],
+                    lineStyle: { width: 3, color: '#faad14' },
+                    itemStyle: { color: '#faad14' },
+                    areaStyle: {
+                        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                            { offset: 0, color: 'rgba(250, 173, 20, 0.3)' },
+                            { offset: 1, color: 'rgba(250, 173, 20, 0.05)' }
+                        ])
+                    }
+                }]
+            });
+
+            // 4. 温度图表
+            tempChart.setOption({
+                ...commonOption,
+                tooltip: {
+                    ...commonOption.tooltip,
+                    formatter: (params) => {
+                        if (!params.length) return '';
+                        const item = params[0];
+                        const val = item.value[1];
+                        const color = val < 10 ? '#1890ff' : (val > 30 ? '#ff4d4f' : '#52c41a');
+                        return `${new Date(item.value[0]).toLocaleTimeString()}<br/><span style="color:${color}">实际温度: ${val.toFixed(1)}°C</span>`;
+                    }
+                },
+                yAxis: {
+                    ...commonOption.yAxis,
+                    min: -10,
+                    max: 50,
+                    name: '温度 (°C)'
+                },
+                visualMap: {
+                    show: false,
+                    dimension: 1,
+                    pieces: [
+                        { lte: 10, color: '#1890ff' },
+                        { gt: 10, lte: 30, color: '#52c41a' },
+                        { gt: 30, color: '#ff4d4f' }
+                    ]
+                },
+                series: [{
+                    name: 'TEMP',
+                    type: 'line',
+                    smooth: true,
+                    symbol: 'circle',
+                    symbolSize: 6,
+                    data: [],
+                    lineStyle: { width: 4 },
+                    markLine: {
+                        silent: true,
+                        symbol: ['none', 'arrow'],
+                        data: [
+                            { yAxis: 35, name: '高温预警线', lineStyle: { color: '#ff4d4f', type: 'dashed', width: 1.5 } },
+                            { yAxis: 5, name: '低温预警线', lineStyle: { color: '#1890ff', type: 'dashed', width: 1.5 } }
+                        ],
+                        label: { color: '#666', fontSize: 12, position: 'end' }
+                    }
+                }]
+            });
+
+            // 窗口自适应
+            window.addEventListener('resize', () => {
+                adjChart.resize();
+                ntcChart.resize();
+                lightChart.resize();
+                tempChart.resize();
+            });
+
+            // 绑定下拉框切换事件
+            bindSelectorEvents();
+            console.log('✅ 图表初始化完成');
+        }
+
+        // 绑定时间选择器切换事件（核心：切换不丢数据）
+        function bindSelectorEvents() {
+            document.querySelectorAll('.time-selector').forEach(sel => {
+                sel.addEventListener('change', function() {
+                    const chartType = this.getAttribute('data-chart');
+                    const newDuration = parseInt(this.value);
+
+                    // 只更新时长配置，不碰任何数据缓存
+                    chartDurationConfig[chartType] = newDuration;
+                    console.log(`📊 ${chartType} 切换为显示最近 ${newDuration/1000} 秒数据`);
+
+                    // 立即刷新图表，显示对应时长的历史数据
+                    updateSingleChart(chartType);
+                });
+            });
+        }
+
+        // ===================== 2. 核心逻辑：计算X轴区间（基金股票分时图逻辑） =====================
+        function calculateTimeRange(duration) {
+            const now = Date.now();
+            // 无数据时：预显示当前时间的窗口
+            if (globalDataCache.length === 0) {
+                return {
+                    xMin: now - duration,
+                    xMax: now
+                };
+            }
+
+            // 获取数据的最早和最新时间
+            const firstTime = globalDataCache[0].time;
+            const latestTime = globalDataCache[globalDataCache.length - 1].time;
+            // 计算理论窗口左边界（最新时间 - 选择的时长）
+            const windowLeft = latestTime - duration;
+
+            // 核心逻辑：
+            // 1. 数据还没填满窗口 → 左边界固定在第一个数据的时间，右边界固定为「第一个数据时间+时长」，左边不动，数据向右填充
+            // 2. 数据已填满窗口 → 左边界=最新时间-时长，右边界=最新时间，固定窗口平滑滚动（股票基金效果）
+            if (windowLeft < firstTime) {
+                return {
+                    xMin: firstTime,
+                    xMax: firstTime + duration
+                };
+            } else {
+                return {
+                    xMin: windowLeft,
+                    xMax: latestTime
+                };
+            }
+        }
+
+        // ===================== 3. 更新单个图表 =====================
+        function updateSingleChart(type) {
+            let chartInstance, dataKey;
+            switch(type) {
+                case 'adj': chartInstance = adjChart; dataKey = 'adj'; break;
+                case 'ntc': chartInstance = ntcChart; dataKey = 'ntc'; break;
+                case 'light': chartInstance = lightChart; dataKey = 'light'; break;
+                case 'temp': chartInstance = tempChart; dataKey = 'temp'; break;
+                default: return;
+            }
+
+            if (!chartInstance) return;
+
+            // 1. 获取当前图表的显示时长
+            const duration = chartDurationConfig[type];
+            // 2. 计算X轴区间（核心逻辑）
+            const { xMin, xMax } = calculateTimeRange(duration);
+            // 3. 把全局缓存转为ECharts需要的[时间戳, 数值]格式
+            const seriesData = globalDataCache.map(item => [item.time, item[dataKey]]);
+
+            // 4. 渲染图表（只更新数据和X轴区间，不重置其他配置）
+            chartInstance.setOption({
+                xAxis: { min: xMin, max: xMax },
+                series: [{ data: seriesData }]
+            }, { notMerge: false, lazyUpdate: true });
+        }
+
+        // ===================== 4. 追加实时数据（完全兼容你的后端格式） =====================
+        function appendRealTimeData(data) {
+            if (!data) return;
+
+            // 1. 解析时间戳和数值（和实时页面完全一致）
+            const timeStamp = timeStrToTimestamp(data.update_time);
+            const newData = {
+                time: timeStamp,
+                adj: isNaN(Number(data.adj)) ? 0 : Number(data.adj),
+                ntc: isNaN(Number(data.ntc)) ? 0 : Number(data.ntc),
+                light: isNaN(Number(data.light)) ? 0 : Number(data.light),
+                temp: isNaN(Number(data.temp)) ? 0 : Number(data.temp)
+            };
+
+            // 2. 追加到全局缓存
+            globalDataCache.push(newData);
+
+            // 3. 限制最大缓存量，防止内存溢出
+            if (globalDataCache.length > MAX_DATA_COUNT) {
+                globalDataCache.shift();
+            }
+
+            // 4. 实时更新所有图表
+            updateSingleChart('adj');
+            updateSingleChart('ntc');
+            updateSingleChart('light');
+            updateSingleChart('temp');
+        }
+
+        // ===================== 5. WebSocket连接（完全复用你实时页面的稳定逻辑） =====================
+        function initWebSocket() {
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+
+            const wsUrl = 'ws://127.0.0.1:5000/ws/sensor';
+            console.log('正在连接WebSocket:', wsUrl);
+
+            try {
+                ws = new WebSocket(wsUrl);
+
+                ws.onopen = function() {
+                    console.log('✅ WebSocket连接成功');
+                    const statusDom = document.getElementById('connect-status');
+                    statusDom.innerHTML = '✅ 已连接到服务器，趋势图实时同步中';
+                    statusDom.style.cssText = 'width: 90%; margin: 30px auto; padding: 15px; text-align: center; border: 1px solid #52c41a; border-radius: 8px; background: rgba(82, 196, 26, 0.1); font-size: 14px; color: #52c41a;';
+                };
+
+                ws.onmessage = function(event) {
+                    try {
+                        const data = JSON.parse(event.data);
+                        appendRealTimeData(data);
+                    } catch (e) {
+                        console.error('❌ 数据解析失败:', e, '原始内容:', event.data);
+                    }
+                };
+
+                ws.onclose = function() {
+                    console.log('⚠️ WebSocket连接断开，3秒后自动重连');
+                    const statusDom = document.getElementById('connect-status');
+                    statusDom.innerHTML = '❌ 服务器连接断开，正在尝试重连...';
+                    statusDom.style.cssText = 'width: 90%; margin: 30px auto; padding: 15px; text-align: center; border: 1px solid #ff4d4f; border-radius: 8px; background: rgba(255, 77, 79, 0.1); font-size: 14px; color: #ff4d4f;';
+                    setTimeout(initWebSocket, 3000);
+                };
+
+                ws.onerror = function(err) {
+                    console.error('❌ WebSocket连接错误:', err);
+                };
+
+            } catch (e) {
+                console.error('❌ WebSocket初始化失败:', e);
+                setTimeout(initWebSocket, 3000);
+            }
+        }
+
+        // ===================== 页面加载启动 =====================
+        window.onload = function() {
+            initCharts();
+            initWebSocket();
+        };
+    </script>
+</body>
+</html>
