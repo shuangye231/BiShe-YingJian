@@ -1,4 +1,4 @@
-C51 COMPILER V9.54   MAIN                                                                  02/14/2026 17:53:52 PAGE 1   
+C51 COMPILER V9.54   MAIN                                                                  03/13/2026 20:33:25 PAGE 1   
 
 
 C51 COMPILER V9.54, COMPILATION OF MODULE MAIN
@@ -13,65 +13,95 @@ line level    source
    3          #include "Delay.h"
    4          #include "XPT2046.h"
    5          #include "UART.h"
-   6          #include <stdio.h>      // 用于 sprintf
-   7          
-   8          unsigned int ADValue;   // ADC转换数字信号
+   6          #include "OneWire.h"
+   7          #include "DS18B20.h"
+   8          #include <stdio.h>     // 用于 sprintf
    9          
-  10          // 删掉重复的声明（已在UART.h中声明）
-  11          // void UART_Init(void);   
-  12          // void UART_SendString(unsigned char *str);  
-  13          
-  14          void main(){
-  15   1          unsigned int adj_value, ntc_value, light_value; // 分别存储三路值
-  16   1          unsigned char send_buf[64] = {0};               // 增大缓冲区，初始化
+  10          // 全局温度变量
+  11          float T;
+  12          
+  13          void main()
+  14          {
+  15   1          unsigned int adj_value, ntc_value, light_value;     // 三路ADC值
+  16   1          unsigned char xdata send_buf[80] = {0};              // 串口发送缓冲区
   17   1          char *status;
-  18   1          
-  19   1          UART_Init();        // 初始化串口
-  20   1          LCD_Init();         // 初始化LCD1602
-  21   1          LCD_ShowString(1, 1, "ADJ  NTC  RG"); // 显示固定字符串
-  22   1          
-  23   1          while(1){
-  24   2              // 1. 读取可调电阻（电位器）
-  25   2              adj_value = XPT2046_ReadAD(XPT2046_XP_8);
-  26   2              LCD_ShowNum(2, 1, adj_value, 4);
-  27   2              
-  28   2              // 2. 读取热敏电阻
-  29   2              ntc_value = XPT2046_ReadAD(XPT2046_YP_8);
-  30   2              LCD_ShowNum(2, 6, ntc_value, 4);
-  31   2              
-  32   2              // 3. 读取光敏电阻
-  33   2              light_value = XPT2046_ReadAD(XPT2046_VBAT_8);
-  34   2              LCD_ShowNum(2, 11, light_value, 4);
-  35   2              
-  36   2              // 4. 根据光照值判断状态
-  37   2              if (light_value > 800) 
-  38   2                  status = "Bright";
-  39   2              else if (light_value > 300) 
-  40   2                  status = "Normal";
-  41   2              else 
-  42   2                  status = "Dark";
-  43   2              
-  44   2              // 5. 格式化发送字符串（新增ADJ/NTC）
-  45   2              sprintf(send_buf, "ADJ:%d|NTC:%d|LIGHT:%d|STATUS:%s\r\n", 
-  46   2                      adj_value, ntc_value, light_value, status);
-  47   2              
-  48   2              // 6. 通过串口发送
-  49   2              UART_SendString(send_buf);
-  50   2              
-  51   2              // 7. 延时
-  52   2              Delay(100);      
-  53   2          }
-  54   1      }
-C51 COMPILER V9.54   MAIN                                                                  02/14/2026 17:53:52 PAGE 2   
+  18   1      
+  19   1          // ===================== 系统初始化 =====================
+  20   1          DS18B20_ConvertT();     // 上电先转换一次温度，防止第一次读取错误
+  21   1          Delay(1000);            // 延时1秒
+  22   1      
+  23   1          UART_Init();            // 初始化串口
+  24   1          LCD_Init();             // 初始化LCD1602
+  25   1      
+  26   1          LCD_ShowString(1, 1, "ADJ NTC RG");   // 第一行显示固定标题
+  27   1      
+  28   1          while (1)
+  29   1          {
+  30   2              // ===================== 1. DS18B20温度读取 =====================
+  31   2              DS18B20_ConvertT();     // 启动温度转换
+  32   2              T = DS18B20_ReadT();    // 读取温度
+  33   2      
+  34   2              // LCD显示温度（可选）
+  35   2              /*
+  36   2              LCD_ShowNum(1, 13, (int)T, 2);           // 整数部分
+  37   2              LCD_ShowString(1, 15, ".");              // 小数点
+  38   2              LCD_ShowNum(1, 16, (int)(T * 10) % 10,1);// 小数部分
+  39   2              */
+  40   2      
+  41   2              // ===================== 2. 三路ADC读取 =====================
+  42   2      
+  43   2              // 可调电阻（电位器）
+  44   2              adj_value = XPT2046_ReadAD(XPT2046_XP_8);
+  45   2              LCD_ShowNum(2, 1, adj_value, 4);
+  46   2      
+  47   2              // 热敏电阻
+  48   2              ntc_value = XPT2046_ReadAD(XPT2046_YP_8);
+  49   2              LCD_ShowNum(2, 6, ntc_value, 4);
+  50   2      
+  51   2              // 光敏电阻
+  52   2              light_value = XPT2046_ReadAD(XPT2046_VBAT_8);
+  53   2              LCD_ShowNum(2, 11, light_value, 4);
+  54   2      
+C51 COMPILER V9.54   MAIN                                                                  03/13/2026 20:33:25 PAGE 2   
 
+  55   2              // ===================== 3. 亮暗状态判断 =====================
+  56   2              if (light_value > 30)
+  57   2              {
+  58   3                  status = "Light";
+  59   3              }
+  60   2              else
+  61   2              {
+  62   3                  status = "Dark";
+  63   3              }
+  64   2      
+  65   2              // ===================== 4. 格式化串口发送数据 =====================
+  66   2              // 格式：
+  67   2              // ADJ:xxx|NTC:xxx|LIGHT:xxx|STATUS:xxx|TEMP:xx.x
+  68   2              sprintf(
+  69   2                  send_buf,
+  70   2                  "ADJ:%d|NTC:%d|LIGHT:%d|STATUS:%s|TEMP:%.1f\r\n",
+  71   2                  adj_value,
+  72   2                  ntc_value,
+  73   2                  light_value,
+  74   2                  status,
+  75   2                  T
+  76   2              );
+  77   2      
+  78   2              // ===================== 5. 串口发送 =====================
+  79   2              UART_SendString(send_buf);
+  80   2      
+  81   2              // ===================== 6. 延时 =====================
+  82   2              Delay(100);
+  83   2          }
+  84   1      }
 
 
 MODULE INFORMATION:   STATIC OVERLAYABLE
-   CODE SIZE        =    224    ----
-   CONSTANT SIZE    =    131    ----
-   XDATA SIZE       =   ----    ----
+   CODE SIZE        =    238    ----
+   CONSTANT SIZE    =    147    ----
+   XDATA SIZE       =   ----      80
    PDATA SIZE       =   ----    ----
-   DATA SIZE        =      2      73
+   DATA SIZE        =      4       9
    IDATA SIZE       =   ----    ----
    BIT SIZE         =   ----    ----
 END OF MODULE INFORMATION.
